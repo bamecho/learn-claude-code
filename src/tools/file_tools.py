@@ -4,13 +4,11 @@ from pathlib import Path
 from .base import ToolResult
 
 
-WORKDIR = Path(os.getcwd()).resolve()
-
-
 def safe_path(p: str) -> Path:
-    """Resolve *p* relative to WORKDIR and enforce workspace boundary."""
-    path = (WORKDIR / p).resolve()
-    if not path.is_relative_to(WORKDIR):
+    """Resolve *p* relative to current working directory and enforce workspace boundary."""
+    workdir = Path(os.getcwd()).resolve()
+    path = (workdir / p).resolve()
+    if not path.is_relative_to(workdir):
         raise ValueError(f"Path escapes workspace: {p}")
     return path
 
@@ -21,9 +19,9 @@ class ReadFileTool:
     input_schema = {
         "type": "object",
         "properties": {
-            "filePath": {"type": "string"},
-            "startLine": {"type": "integer"},
-            "endLine": {"type": "integer"},
+            "filePath": {"type": "string", "description": "Path to the file, relative to the workspace root."},
+            "startLine": {"type": "integer", "description": "1-based line number to start reading from (inclusive)."},
+            "endLine": {"type": "integer", "description": "1-based line number to stop reading at (inclusive)."},
         },
         "required": ["filePath"],
     }
@@ -39,7 +37,7 @@ class ReadFileTool:
 
         try:
             lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
             return ToolResult(tool_use_id=tool_use_id, content=f"Error: {e}", is_error=True)
 
         start = input.get("startLine")
@@ -65,8 +63,8 @@ class WriteFileTool:
     input_schema = {
         "type": "object",
         "properties": {
-            "filePath": {"type": "string"},
-            "content": {"type": "string"},
+            "filePath": {"type": "string", "description": "Path to the file, relative to the workspace root."},
+            "content": {"type": "string", "description": "Content to write into the file."},
         },
         "required": ["filePath", "content"],
     }
@@ -97,9 +95,9 @@ class EditFileTool:
     input_schema = {
         "type": "object",
         "properties": {
-            "filePath": {"type": "string"},
-            "oldText": {"type": "string"},
-            "newText": {"type": "string"},
+            "filePath": {"type": "string", "description": "Path to the file, relative to the workspace root."},
+            "oldText": {"type": "string", "description": "Exact text to replace. Must appear exactly once in the file."},
+            "newText": {"type": "string", "description": "Text to insert in place of oldText."},
         },
         "required": ["filePath", "oldText", "newText"],
     }
@@ -115,7 +113,7 @@ class EditFileTool:
 
         try:
             content = path.read_text(encoding="utf-8")
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
             return ToolResult(tool_use_id=tool_use_id, content=f"Error: {e}", is_error=True)
 
         count = content.count(old_text)

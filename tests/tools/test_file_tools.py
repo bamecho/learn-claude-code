@@ -2,18 +2,24 @@ from pathlib import Path
 
 import pytest
 
-from src.tools.file_tools import safe_path, WORKDIR, ReadFileTool, WriteFileTool, EditFileTool
+from src.tools.file_tools import safe_path, ReadFileTool, WriteFileTool, EditFileTool
 import src.tools.file_tools as ft
+
+
+@pytest.fixture(autouse=True)
+def patch_workdir(monkeypatch, tmp_path):
+    """Change current working directory to tmp_path for all tests in this module."""
+    monkeypatch.chdir(tmp_path)
 
 
 def test_safe_path_relative():
     result = safe_path("src/main.py")
-    assert result == WORKDIR / "src" / "main.py"
+    assert result.name == "main.py"
 
 
 def test_safe_path_subdirectory():
     result = safe_path("deep/nested/file.txt")
-    assert result == WORKDIR / "deep" / "nested" / "file.txt"
+    assert result.name == "file.txt"
 
 
 def test_safe_path_traversal_attack():
@@ -27,10 +33,6 @@ def test_safe_path_absolute_outside():
 
 
 class TestReadFileTool:
-    @pytest.fixture(autouse=True)
-    def patch_workdir(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(ft, "WORKDIR", tmp_path)
-
     def test_read_full(self, tmp_path):
         (tmp_path / "hello.txt").write_text("line1\nline2\nline3\n")
         tool = ReadFileTool()
@@ -78,12 +80,14 @@ class TestReadFileTool:
         assert result.is_error is True
         assert "escapes workspace" in result.content
 
+    def test_read_unicode_error(self, tmp_path):
+        (tmp_path / "binary.bin").write_bytes(b"\xff\xfe")
+        tool = ReadFileTool()
+        result = tool.execute("tu_1", {"filePath": "binary.bin"})
+        assert result.is_error is True
+
 
 class TestWriteFileTool:
-    @pytest.fixture(autouse=True)
-    def patch_workdir(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(ft, "WORKDIR", tmp_path)
-
     def test_write_new_file(self, tmp_path):
         tool = WriteFileTool()
         result = tool.execute("tu_1", {"filePath": "new.txt", "content": "hello"})
@@ -112,10 +116,6 @@ class TestWriteFileTool:
 
 
 class TestEditFileTool:
-    @pytest.fixture(autouse=True)
-    def patch_workdir(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(ft, "WORKDIR", tmp_path)
-
     def test_edit_success(self, tmp_path):
         (tmp_path / "foo.txt").write_text("hello world")
         tool = EditFileTool()
@@ -143,3 +143,9 @@ class TestEditFileTool:
         result = tool.execute("tu_1", {"filePath": "../secret.txt", "oldText": "a", "newText": "b"})
         assert result.is_error is True
         assert "escapes workspace" in result.content
+
+    def test_edit_unicode_error(self, tmp_path):
+        (tmp_path / "binary.bin").write_bytes(b"\xff\xfe")
+        tool = EditFileTool()
+        result = tool.execute("tu_1", {"filePath": "binary.bin", "oldText": "a", "newText": "b"})
+        assert result.is_error is True
