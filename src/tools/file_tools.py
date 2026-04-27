@@ -57,3 +57,35 @@ class ReadFileTool:
 
         selected = lines[start_idx:end_idx]
         return ToolResult(tool_use_id=tool_use_id, content="".join(selected), is_error=False)
+
+
+class WriteFileTool:
+    name = "write_file"
+    description = "Write content to a file, overwriting if it exists."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "filePath": {"type": "string"},
+            "content": {"type": "string"},
+        },
+        "required": ["filePath", "content"],
+    }
+
+    def execute(self, tool_use_id: str, input: dict) -> ToolResult:
+        try:
+            path = safe_path(input["filePath"])
+        except ValueError as e:
+            return ToolResult(tool_use_id=tool_use_id, content=f"Error: {e}", is_error=True)
+
+        content = input.get("content", "")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        except OSError as e:
+            return ToolResult(tool_use_id=tool_use_id, content=f"Error: {e}", is_error=True)
+
+        return ToolResult(
+            tool_use_id=tool_use_id,
+            content=f"Wrote {len(content.encode('utf-8'))} bytes to {input['filePath']}",
+            is_error=False,
+        )
