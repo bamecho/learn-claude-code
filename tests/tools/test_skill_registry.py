@@ -1,0 +1,61 @@
+import tempfile
+import os
+from pathlib import Path
+from src.tools.skill_registry import SkillRegistry, SkillManifest
+
+
+def test_scan_directory_parses_frontmatter():
+    with tempfile.TemporaryDirectory() as td:
+        skill_dir = Path(td) / "brainstorming"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: brainstorming\n"
+            "description: Brainstorming Ideas Into Designs\n"
+            "---\n"
+            "\n"
+            "# Brainstorming\n\n"
+            "Start by understanding the current project context...\n"
+        )
+        registry = SkillRegistry(skills_dir=td)
+        manifests = registry.list_manifests()
+        assert len(manifests) == 1
+        assert manifests[0] == SkillManifest(
+            name="brainstorming",
+            description="Brainstorming Ideas Into Designs",
+        )
+        doc = registry.get("brainstorming")
+        assert doc is not None
+        assert doc.body.strip() == "# Brainstorming\n\nStart by understanding the current project context..."
+
+
+def test_missing_frontmatter_skipped():
+    with tempfile.TemporaryDirectory() as td:
+        skill_dir = Path(td) / "bad-skill"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# No frontmatter here\n")
+        registry = SkillRegistry(skills_dir=td)
+        assert registry.list_manifests() == []
+        assert registry.get("bad-skill") is None
+
+
+def test_missing_required_fields_skipped():
+    with tempfile.TemporaryDirectory() as td:
+        skill_dir = Path(td) / "incomplete"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: incomplete\n"
+            "---\n"
+            "\n"
+            "body\n"
+        )
+        registry = SkillRegistry(skills_dir=td)
+        assert registry.list_manifests() == []
+        assert registry.get("incomplete") is None
+
+
+def test_nonexistent_directory_returns_empty():
+    registry = SkillRegistry(skills_dir="/tmp/nonexistent_skills_dir_xyz")
+    assert registry.list_manifests() == []
+    assert registry.get("anything") is None
