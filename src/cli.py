@@ -1,16 +1,22 @@
 import os
+
 from dotenv import load_dotenv
 from src.provider.anthropic_provider import AnthropicProvider
 from src.tools.base import ToolRegistry
-from src.tools.mock_tools import MockFileReadTool
+from src.tools.bash_tool import BashTool
+from src.tools.file_tools import ReadFileTool, WriteFileTool, EditFileTool
 from src.agent.agent import Agent
 
 
 def main() -> None:
-    load_dotenv()
-    api_key = os.getenv("API_KEY")
-    base_url = os.getenv("BASE_URL") or None
-    model = os.getenv("MODEL") or None
+    load_dotenv(override=True)
+
+    if os.getenv("ANTHROPIC_BASE_URL"):
+        os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+
+    api_key = os.getenv("API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    base_url = os.getenv("BASE_URL") or os.getenv("ANTHROPIC_BASE_URL") or None
+    model = os.getenv("MODEL") or os.getenv("MODEL_ID") or None
 
     if not api_key:
         print("Error: API_KEY not set. Please copy .env.example to .env and configure.")
@@ -18,9 +24,17 @@ def main() -> None:
 
     provider = AnthropicProvider(api_key=api_key, base_url=base_url, model=model)
     registry = ToolRegistry()
-    registry.register(MockFileReadTool())
+    registry.register(BashTool())
+    registry.register(ReadFileTool())
+    registry.register(WriteFileTool())
+    registry.register(EditFileTool())
 
-    agent = Agent(provider, registry)
+    system = (
+        f"You are a coding agent at {os.getcwd()}. "
+        "You have access to bash, read_file, write_file, and edit_file tools. "
+        "Use them to inspect and change the workspace. Act first, then report clearly."
+    )
+    agent = Agent(provider, registry, system=system)
 
     try:
         agent.run_interactive()
