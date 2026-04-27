@@ -1,3 +1,5 @@
+- use question tool for clarifying.
+
 ## 项目概述
 
 参考 [shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code)，采用 **vibe coding** 方式实现一个类 Claude Code 的编程 Agent 工具。
