@@ -100,6 +100,10 @@ class Agent:
         self.system = system
         self.turn_count: int = 0
         self.transition_reason: str | None = None
+        self.todo_manager = None
+        todo_tool = self.registry.get("todo")
+        if todo_tool is not None:
+            self.todo_manager = getattr(todo_tool, "manager", None)
 
     def run_interactive(self) -> None:
         print("Agent 已启动。输入 /exit、exit、q 或留空退出。")
@@ -190,6 +194,20 @@ class Agent:
                     "content": result.content,
                     "is_error": result.is_error,
                 })
+
+            used_todo = any(tu.name == "todo" for tu in tool_uses)
+
+            if self.todo_manager is not None:
+                if used_todo:
+                    self.todo_manager.state.rounds_since_update = 0
+                else:
+                    self.todo_manager.note_round_without_update()
+                    reminder = self.todo_manager.reminder()
+                    if reminder:
+                        tool_result_blocks.insert(
+                            0, {"type": "text", "text": reminder}
+                        )
+
             state.messages.append({"role": "user", "content": tool_result_blocks})
 
         if response.stop_reason == "end_turn":

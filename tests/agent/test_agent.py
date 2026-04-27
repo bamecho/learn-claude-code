@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 from src.agent.agent import Agent
 from src.provider.base import LLMResponse, ContentBlock
 from src.tools.base import ToolRegistry, ToolResult
+from src.tools.todo_tool import TodoTool
 
 
 def test_agent_end_turn_with_text():
@@ -96,3 +97,87 @@ def test_agent_error_stop_reason():
     agent._run_turn("Trigger error")
 
     assert len(agent.messages) == 2
+
+
+def test_agent_todo_resets_rounds():
+    """Calling todo should reset rounds_since_update to 0."""
+    mock_provider = MagicMock()
+    mock_provider.chat.side_effect = [
+        LLMResponse(
+            content=[
+                ContentBlock(
+                    type="tool_use",
+                    id="tu1",
+                    name="todo",
+                    input={"items": [{"content": "Plan", "status": "pending"}]},
+                )
+            ],
+            stop_reason="tool_use",
+        ),
+        LLMResponse(
+            content=[ContentBlock(type="text", text="Done")],
+            stop_reason="end_turn",
+        ),
+    ]
+
+    registry = ToolRegistry()
+    todo_tool = TodoTool()
+    registry.register(todo_tool)
+
+    agent = Agent(mock_provider, registry)
+    todo_tool.manager.note_round_without_update()
+    todo_tool.manager.note_round_without_update()
+    assert todo_tool.manager.state.rounds_since_update == 2
+    agent._run_turn("Make a plan")
+
+    assert todo_tool.manager.state.rounds_since_update == 0
+
+
+def test_agent_reminder_after_three_rounds():
+    """After 3 turns without todo, the next tool result should include a reminder."""
+    mock_provider = MagicMock()
+    mock_provider.chat.side_effect = [
+        # Round 1: bash
+        LLMResponse(
+            content=[ContentBlock(type="tool_use", id="tu1", name="bash", input={"command": "echo 1"})],
+            stop_reason="tool_use",
+        ),
+        # Round 2: bash
+        LLMResponse(
+            content=[ContentBlock(type="tool_use", id="tu2", name="bash", input={"command": "echo 2"})],
+            stop_reason="tool_use",
+        ),
+        # Round 3: bash (reminder should fire now)
+        LLMResponse(
+            content=[ContentBlock(type="tool_use", id="tu3", name="bash", input={"command": "echo 3"})],
+            stop_reason="tool_use",
+        ),
+        # Final: end_turn
+        LLMResponse(
+            content=[ContentBlock(type="text", text="Done")],
+            stop_reason="end_turn",
+        ),
+    ]
+
+    registry = ToolRegistry()
+    bash_tool = MagicMock()
+    bash_tool.name = "bash"
+    bash_tool.execute.return_value = ToolResult(tool_use_id="x", content="ok")
+    registry.register(bash_tool)
+
+    todo_tool = TodoTool()
+    todo_tool.manager.update([{"content": "Initial task", "status": "pending"}])
+    registry.register(todo_tool)
+
+    agent = Agent(mock_provider, registry)
+    agent._run_turn("Do work")
+
+    # Find the last user message (should be round 3 tool results)
+    user_messages = [m for m in agent.messages if m["role"] == "user"]
+    last_user = user_messages[-1]
+    content = last_user["content"]
+
+    assert any(
+        block.get("type") == "text" and "reminder" in str(block.get("text", ""))
+        for block in content
+    )
