@@ -5,6 +5,7 @@ from src.provider.anthropic_provider import AnthropicProvider
 from src.tools.base import ToolRegistry
 from src.tools.bash_tool import BashTool
 from src.tools.file_tools import ReadFileTool, WriteFileTool, EditFileTool
+from src.tools.todo_tool import TodoTool
 from src.agent.agent import Agent
 
 
@@ -28,11 +29,15 @@ def main() -> None:
     registry.register(ReadFileTool())
     registry.register(WriteFileTool())
     registry.register(EditFileTool())
+    registry.register(TodoTool())
 
     system = (
         f"You are a coding agent at {os.getcwd()}. "
-        "You have access to bash, read_file, write_file, and edit_file tools. "
-        "Use them to inspect and change the workspace. Act first, then report clearly."
+        "You have access to bash, read_file, write_file, edit_file, and todo tools. "
+        "Use them to inspect and change the workspace. Act first, then report clearly. "
+        "Use the todo tool for multi-step work. "
+        "Keep exactly one step in_progress when a task has multiple steps. "
+        "Refresh the plan as work advances. Prefer tools over prose."
     )
     agent = Agent(provider, registry, system=system)
 
