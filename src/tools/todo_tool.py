@@ -35,10 +35,11 @@ class TodoTool:
 
     def execute(self, tool_use_id: str, input: dict) -> ToolResult:
         try:
-            self.manager.update(input["items"])
+            items = input["items"]
+            self.manager.update(items)
             text = self.manager.render()
             return ToolResult(tool_use_id=tool_use_id, content=text)
-        except ValueError as exc:
+        except (KeyError, ValueError) as exc:
             return ToolResult(
                 tool_use_id=tool_use_id, content=str(exc), is_error=True
             )
