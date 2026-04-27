@@ -85,6 +85,7 @@ class LoopState:
     messages: list
     turn_count: int = 1
     transition_reason: str | None = None
+    max_turns: int | None = None
 
 
 class Agent:
@@ -134,9 +135,9 @@ class Agent:
                 texts.append(text)
         return "\n".join(texts).strip()
 
-    def _run_turn(self, user_input: str) -> None:
+    def _run_turn(self, user_input: str, max_turns: int | None = None) -> None:
         self.messages.append({"role": "user", "content": user_input})
-        state = LoopState(messages=self.messages)
+        state = LoopState(messages=self.messages, max_turns=max_turns)
         self._agent_loop(state)
         self.turn_count = state.turn_count
         self.transition_reason = state.transition_reason
@@ -146,6 +147,9 @@ class Agent:
             pass
 
     def _run_one_turn(self, state: LoopState) -> bool:
+        if state.max_turns is not None and state.turn_count > state.max_turns:
+            state.transition_reason = "max_turns"
+            return False
         tools = self.registry.to_anthropic_format()
         response = self.provider.chat(normalize_messages(state.messages), tools, system=self.system)
 
