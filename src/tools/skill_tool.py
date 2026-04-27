@@ -1,5 +1,5 @@
-from src.tools.base import ToolResult
-from src.tools.skill_registry import SkillRegistry
+from .base import ToolResult
+from .skill_registry import SkillRegistry
 
 
 class SkillTool:

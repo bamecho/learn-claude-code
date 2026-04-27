@@ -40,6 +40,13 @@ def test_missing_name_returns_error():
     assert "Missing" in result.content
 
 
+def test_whitespace_name_returns_error():
+    registry = SkillRegistry(skills_dir="/tmp/nonexistent_xyz")
+    tool = SkillTool(registry)
+    result = tool.execute("tu-5", {"name": "   "})
+    assert result.is_error
+
+
 def test_unknown_name_returns_error_with_list():
     with tempfile.TemporaryDirectory() as td:
         skill_dir = Path(td) / "brainstorming"
@@ -56,4 +63,6 @@ def test_unknown_name_returns_error_with_list():
         tool = SkillTool(registry)
         result = tool.execute("tu-4", {"name": "nonexistent"})
         assert result.is_error
+        assert "Skill 'nonexistent' not found" in result.content
+        assert "Available skills:" in result.content
         assert "brainstorming" in result.content
