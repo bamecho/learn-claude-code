@@ -12,7 +12,7 @@ class AnthropicProvider:
         self.client = Anthropic(api_key=api_key, base_url=base_url)
         self.model = model or "claude-3-5-sonnet-20241022"
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMResponse:
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, system: str | None = None) -> LLMResponse:
         try:
             kwargs: dict = {
                 "model": self.model,
@@ -21,6 +21,8 @@ class AnthropicProvider:
             }
             if tools:
                 kwargs["tools"] = tools
+            if system:
+                kwargs["system"] = system
 
             response = self.client.messages.create(**kwargs)
 

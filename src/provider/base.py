@@ -20,6 +20,6 @@ class LLMResponse:
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMResponse:
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, system: str | None = None) -> LLMResponse:
         """调用 LLM，返回统一格式的响应。"""
         ...
