@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.tools.file_tools import safe_path, WORKDIR, ReadFileTool, WriteFileTool
+from src.tools.file_tools import safe_path, WORKDIR, ReadFileTool, WriteFileTool, EditFileTool
 import src.tools.file_tools as ft
 
 
@@ -107,5 +107,39 @@ class TestWriteFileTool:
     def test_write_path_escape(self, tmp_path):
         tool = WriteFileTool()
         result = tool.execute("tu_1", {"filePath": "../evil.txt", "content": "x"})
+        assert result.is_error is True
+        assert "escapes workspace" in result.content
+
+
+class TestEditFileTool:
+    @pytest.fixture(autouse=True)
+    def patch_workdir(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(ft, "WORKDIR", tmp_path)
+
+    def test_edit_success(self, tmp_path):
+        (tmp_path / "foo.txt").write_text("hello world")
+        tool = EditFileTool()
+        result = tool.execute("tu_1", {"filePath": "foo.txt", "oldText": "world", "newText": "python"})
+        assert result.is_error is False
+        assert "Replaced 1 occurrence" in result.content
+        assert (tmp_path / "foo.txt").read_text() == "hello python"
+
+    def test_edit_not_found(self, tmp_path):
+        (tmp_path / "foo.txt").write_text("hello world")
+        tool = EditFileTool()
+        result = tool.execute("tu_1", {"filePath": "foo.txt", "oldText": "missing", "newText": "x"})
+        assert result.is_error is True
+        assert "not found" in result.content
+
+    def test_edit_multiple_matches(self, tmp_path):
+        (tmp_path / "foo.txt").write_text("aaa aaa aaa")
+        tool = EditFileTool()
+        result = tool.execute("tu_1", {"filePath": "foo.txt", "oldText": "aaa", "newText": "bbb"})
+        assert result.is_error is True
+        assert "found 3 times" in result.content
+
+    def test_edit_path_escape(self, tmp_path):
+        tool = EditFileTool()
+        result = tool.execute("tu_1", {"filePath": "../secret.txt", "oldText": "a", "newText": "b"})
         assert result.is_error is True
         assert "escapes workspace" in result.content
