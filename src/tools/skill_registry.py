@@ -32,11 +32,9 @@ class SkillRegistry:
                 continue
             parsed = self._parse_file(skill_file.read_text(encoding="utf-8"))
             if parsed is None:
+                print(f"[warning] Skill '{entry.name}': missing or invalid frontmatter, skipping.")
                 continue
             manifest, body = parsed
-            if not manifest.name or not manifest.description:
-                print(f"[warning] Skill '{entry.name}' missing required frontmatter fields, skipping.")
-                continue
             self._skills[manifest.name] = SkillDocument(manifest=manifest, body=body)
 
     def _parse_file(self, text: str) -> tuple[SkillManifest, str] | None:

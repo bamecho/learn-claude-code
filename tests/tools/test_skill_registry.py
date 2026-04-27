@@ -29,7 +29,7 @@ def test_scan_directory_parses_frontmatter():
         assert doc.body.strip() == "# Brainstorming\n\nStart by understanding the current project context..."
 
 
-def test_missing_frontmatter_skipped():
+def test_missing_frontmatter_skipped(capsys):
     with tempfile.TemporaryDirectory() as td:
         skill_dir = Path(td) / "bad-skill"
         skill_dir.mkdir()
@@ -37,9 +37,11 @@ def test_missing_frontmatter_skipped():
         registry = SkillRegistry(skills_dir=td)
         assert registry.list_manifests() == []
         assert registry.get("bad-skill") is None
+        captured = capsys.readouterr()
+        assert "[warning] Skill 'bad-skill': missing or invalid frontmatter, skipping." in captured.out
 
 
-def test_missing_required_fields_skipped():
+def test_missing_required_fields_skipped(capsys):
     with tempfile.TemporaryDirectory() as td:
         skill_dir = Path(td) / "incomplete"
         skill_dir.mkdir()
@@ -53,6 +55,8 @@ def test_missing_required_fields_skipped():
         registry = SkillRegistry(skills_dir=td)
         assert registry.list_manifests() == []
         assert registry.get("incomplete") is None
+        captured = capsys.readouterr()
+        assert "[warning] Skill 'incomplete': missing or invalid frontmatter, skipping." in captured.out
 
 
 def test_nonexistent_directory_returns_empty():
