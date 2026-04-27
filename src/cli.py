@@ -25,13 +25,6 @@ def main() -> None:
         return
 
     provider = AnthropicProvider(api_key=api_key, base_url=base_url, model=model)
-    registry = ToolRegistry()
-    registry.register(BashTool())
-    registry.register(ReadFileTool())
-    registry.register(WriteFileTool())
-    registry.register(EditFileTool())
-    registry.register(TodoTool())
-    registry.register(TaskTool(provider, registry, system=system))
 
     system = (
         f"You are a coding agent at {os.getcwd()}. "
@@ -42,6 +35,14 @@ def main() -> None:
         "Refresh the plan as work advances. Prefer tools over prose. "
         "Use the task tool to delegate independent subtasks to a fresh context."
     )
+
+    registry = ToolRegistry()
+    registry.register(BashTool())
+    registry.register(ReadFileTool())
+    registry.register(WriteFileTool())
+    registry.register(EditFileTool())
+    registry.register(TodoTool())
+    registry.register(TaskTool(provider, registry, system=system))
     agent = Agent(provider, registry, system=system)
 
     try:
