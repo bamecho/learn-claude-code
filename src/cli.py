@@ -6,6 +6,7 @@ from src.tools.base import ToolRegistry
 from src.tools.bash_tool import BashTool
 from src.tools.file_tools import ReadFileTool, WriteFileTool, EditFileTool
 from src.tools.todo_tool import TodoTool
+from src.tools.task_tool import TaskTool
 from src.agent.agent import Agent
 
 
@@ -30,14 +31,16 @@ def main() -> None:
     registry.register(WriteFileTool())
     registry.register(EditFileTool())
     registry.register(TodoTool())
+    registry.register(TaskTool(provider, registry, system=system))
 
     system = (
         f"You are a coding agent at {os.getcwd()}. "
-        "You have access to bash, read_file, write_file, edit_file, and todo tools. "
+        "You have access to bash, read_file, write_file, edit_file, todo, and task tools. "
         "Use them to inspect and change the workspace. Act first, then report clearly. "
         "Use the todo tool for multi-step work. "
         "Keep exactly one step in_progress when a task has multiple steps. "
-        "Refresh the plan as work advances. Prefer tools over prose."
+        "Refresh the plan as work advances. Prefer tools over prose. "
+        "Use the task tool to delegate independent subtasks to a fresh context."
     )
     agent = Agent(provider, registry, system=system)
 
