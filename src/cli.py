@@ -7,6 +7,8 @@ from src.tools.bash_tool import BashTool
 from src.tools.file_tools import ReadFileTool, WriteFileTool, EditFileTool
 from src.tools.todo_tool import TodoTool
 from src.tools.task_tool import TaskTool
+from src.tools.skill_registry import SkillRegistry
+from src.tools.skill_tool import SkillTool
 from src.agent.agent import Agent
 
 
@@ -26,14 +28,27 @@ def main() -> None:
 
     provider = AnthropicProvider(api_key=api_key, base_url=base_url, model=model)
 
+    skill_registry = SkillRegistry(skills_dir=".claude/skills")
+    manifests = skill_registry.list_manifests()
+    skill_prompt = ""
+    if manifests:
+        skills_list = ", ".join(
+            f"{m.name} ({m.description})" for m in manifests
+        )
+        skill_prompt = (
+            f"Available skills: {skills_list}. "
+            "Use the skill tool to load a skill when its instructions are relevant to the current task. "
+        )
+
     system = (
         f"You are a coding agent at {os.getcwd()}. "
-        "You have access to bash, read_file, write_file, edit_file, todo, and task tools. "
+        "You have access to bash, read_file, write_file, edit_file, todo, task, and skill tools. "
         "Use them to inspect and change the workspace. Act first, then report clearly. "
         "Use the todo tool for multi-step work. "
         "Keep exactly one step in_progress when a task has multiple steps. "
         "Refresh the plan as work advances. Prefer tools over prose. "
-        "Use the task tool to delegate independent subtasks to a fresh context."
+        "Use the task tool to delegate independent subtasks to a fresh context. "
+        + skill_prompt
     )
     subagent_system = (
         f"You are a coding subagent at {os.getcwd()}. "
@@ -47,6 +62,7 @@ def main() -> None:
     registry.register(EditFileTool())
     registry.register(TodoTool())
     registry.register(TaskTool(provider, registry, system=system, subagent_system=subagent_system))
+    registry.register(SkillTool(skill_registry))
     agent = Agent(provider, registry, system=system)
 
     try:
