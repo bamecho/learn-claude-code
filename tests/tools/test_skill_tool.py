@@ -21,7 +21,12 @@ def test_load_existing_skill():
         tool = SkillTool(registry)
         result = tool.execute("tu-1", {"name": "code-review"})
         assert not result.is_error
-        assert result.content.strip() == "1. Check for tests"
+        assert result.content == (
+            '<skill name="code-review">\n'
+            "1. Check for tests\n"
+            "\n"
+            "</skill>"
+        )
 
 
 def test_empty_name_returns_error():

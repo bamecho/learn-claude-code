@@ -3,13 +3,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclass
 class SkillManifest:
     name: str
     description: str
+    path: Path
 
 
-@dataclass(frozen=True)
+@dataclass
 class SkillDocument:
     manifest: SkillManifest
     body: str
@@ -23,28 +24,23 @@ class SkillRegistry:
     def _scan(self, root: Path) -> None:
         if not root.exists() or not root.is_dir():
             return
-        for entry in root.iterdir():
-            if not entry.is_dir():
-                continue
-            skill_file = entry / "SKILL.md"
-            if not skill_file.exists():
-                continue
+        for skill_file in sorted(root.rglob("SKILL.md")):
             try:
                 text = skill_file.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
-                print(f"[warning] Skill '{entry.name}': failed to read file, skipping.")
+                print(f"[warning] Skill '{skill_file.parent.name}': failed to read file, skipping.")
                 continue
-            parsed = self._parse_file(text)
+            parsed = self._parse_file(text, skill_file)
             if parsed is None:
-                print(f"[warning] Skill '{entry.name}': missing or invalid frontmatter, skipping.")
+                print(f"[warning] Skill '{skill_file.parent.name}': missing or invalid frontmatter, skipping.")
                 continue
             manifest, body = parsed
             if manifest.name in self._skills:
-                print(f"[warning] Duplicate skill name '{manifest.name}' in '{entry.name}', skipping.")
+                print(f"[warning] Duplicate skill name '{manifest.name}' in '{skill_file.parent.name}', skipping.")
                 continue
             self._skills[manifest.name] = SkillDocument(manifest=manifest, body=body)
 
-    def _parse_file(self, text: str) -> tuple[SkillManifest, str] | None:
+    def _parse_file(self, text: str, path: Path) -> tuple[SkillManifest, str] | None:
         match = re.match(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", text, re.DOTALL)
         if not match:
             return None
@@ -63,7 +59,7 @@ class SkillRegistry:
         description = data.get("description", "")
         if not name or not description:
             return None
-        return SkillManifest(name=name, description=description), body
+        return SkillManifest(name=name, description=description, path=path), body
 
     def list_manifests(self) -> list[SkillManifest]:
         return [doc.manifest for doc in self._skills.values()]

@@ -19,10 +19,8 @@ def test_scan_directory_parses_frontmatter():
         registry = SkillRegistry(skills_dir=td)
         manifests = registry.list_manifests()
         assert len(manifests) == 1
-        assert manifests[0] == SkillManifest(
-            name="brainstorming",
-            description="Brainstorming Ideas Into Designs",
-        )
+        assert manifests[0].name == "brainstorming"
+        assert manifests[0].description == "Brainstorming Ideas Into Designs"
         doc = registry.get("brainstorming")
         assert doc is not None
         assert doc.body.strip() == "# Brainstorming\n\nStart by understanding the current project context..."
@@ -109,7 +107,27 @@ def test_quoted_frontmatter_values_parsed():
         registry = SkillRegistry(skills_dir=td)
         manifests = registry.list_manifests()
         assert len(manifests) == 1
-        assert manifests[0] == SkillManifest(
-            name="brainstorming",
-            description="Brainstorming Ideas",
+        assert manifests[0].name == "brainstorming"
+        assert manifests[0].description == "Brainstorming Ideas"
+
+
+def test_nested_directory_scanned():
+    with tempfile.TemporaryDirectory() as td:
+        skill_dir = Path(td) / "deep" / "nested"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: nested-skill\n"
+            "description: A deeply nested skill\n"
+            "---\n"
+            "\n"
+            "Nested body\n"
         )
+        registry = SkillRegistry(skills_dir=td)
+        manifests = registry.list_manifests()
+        assert len(manifests) == 1
+        assert manifests[0].name == "nested-skill"
+        assert manifests[0].description == "A deeply nested skill"
+        doc = registry.get("nested-skill")
+        assert doc is not None
+        assert doc.body.strip() == "Nested body"

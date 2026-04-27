@@ -39,5 +39,9 @@ class SkillTool:
             )
         return ToolResult(
             tool_use_id=tool_use_id,
-            content=doc.body,
+            content=(
+                f'<skill name="{doc.manifest.name}">\n'
+                f"{doc.body}\n"
+                "</skill>"
+            ),
         )
