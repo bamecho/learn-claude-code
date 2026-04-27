@@ -1,4 +1,3 @@
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,11 +29,19 @@ class SkillRegistry:
             skill_file = entry / "SKILL.md"
             if not skill_file.exists():
                 continue
-            parsed = self._parse_file(skill_file.read_text(encoding="utf-8"))
+            try:
+                text = skill_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                print(f"[warning] Skill '{entry.name}': failed to read file, skipping.")
+                continue
+            parsed = self._parse_file(text)
             if parsed is None:
                 print(f"[warning] Skill '{entry.name}': missing or invalid frontmatter, skipping.")
                 continue
             manifest, body = parsed
+            if manifest.name in self._skills:
+                print(f"[warning] Duplicate skill name '{manifest.name}' in '{entry.name}', skipping.")
+                continue
             self._skills[manifest.name] = SkillDocument(manifest=manifest, body=body)
 
     def _parse_file(self, text: str) -> tuple[SkillManifest, str] | None:
@@ -48,7 +55,10 @@ class SkillRegistry:
             if ":" not in line:
                 continue
             key, value = line.split(":", 1)
-            data[key.strip()] = value.strip()
+            value = value.strip()
+            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            data[key.strip()] = value
         name = data.get("name", "")
         description = data.get("description", "")
         if not name or not description:

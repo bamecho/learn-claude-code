@@ -1,5 +1,4 @@
 import tempfile
-import os
 from pathlib import Path
 from src.tools.skill_registry import SkillRegistry, SkillManifest
 
@@ -63,3 +62,54 @@ def test_nonexistent_directory_returns_empty():
     registry = SkillRegistry(skills_dir="/tmp/nonexistent_skills_dir_xyz")
     assert registry.list_manifests() == []
     assert registry.get("anything") is None
+
+
+def test_duplicate_skill_name_skipped(capsys):
+    with tempfile.TemporaryDirectory() as td:
+        first_dir = Path(td) / "first"
+        first_dir.mkdir()
+        (first_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: duplicate\n"
+            "description: First description\n"
+            "---\n"
+            "First body\n"
+        )
+        second_dir = Path(td) / "second"
+        second_dir.mkdir()
+        (second_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: duplicate\n"
+            "description: Second description\n"
+            "---\n"
+            "Second body\n"
+        )
+        registry = SkillRegistry(skills_dir=td)
+        manifests = registry.list_manifests()
+        assert len(manifests) == 1
+        assert manifests[0].name == "duplicate"
+        doc = registry.get("duplicate")
+        assert doc is not None
+        captured = capsys.readouterr()
+        assert "[warning] Duplicate skill name 'duplicate' in" in captured.out
+
+
+def test_quoted_frontmatter_values_parsed():
+    with tempfile.TemporaryDirectory() as td:
+        skill_dir = Path(td) / "quoted"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            'name: "brainstorming"\n'
+            "description: 'Brainstorming Ideas'\n"
+            "---\n"
+            "\n"
+            "Body\n"
+        )
+        registry = SkillRegistry(skills_dir=td)
+        manifests = registry.list_manifests()
+        assert len(manifests) == 1
+        assert manifests[0] == SkillManifest(
+            name="brainstorming",
+            description="Brainstorming Ideas",
+        )
