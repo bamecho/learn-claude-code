@@ -35,6 +35,10 @@ def main() -> None:
         "Refresh the plan as work advances. Prefer tools over prose. "
         "Use the task tool to delegate independent subtasks to a fresh context."
     )
+    subagent_system = (
+        f"You are a coding subagent at {os.getcwd()}. "
+        "Complete the given task, then summarize your findings."
+    )
 
     registry = ToolRegistry()
     registry.register(BashTool())
@@ -42,7 +46,7 @@ def main() -> None:
     registry.register(WriteFileTool())
     registry.register(EditFileTool())
     registry.register(TodoTool())
-    registry.register(TaskTool(provider, registry, system=system))
+    registry.register(TaskTool(provider, registry, system=system, subagent_system=subagent_system))
     agent = Agent(provider, registry, system=system)
 
     try:
