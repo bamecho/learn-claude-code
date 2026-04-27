@@ -1,0 +1,18 @@
+[project]
+name = "learn-claude-code"
+version = "0.1.0"
+description = "A Claude Code-like programming agent tool"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.30.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
