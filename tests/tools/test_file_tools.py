@@ -2,24 +2,23 @@ from pathlib import Path
 
 import pytest
 
-from src.tools.file_tools import safe_path, ReadFileTool, WriteFileTool, EditFileTool
+from src.tools.file_tools import safe_path, WORKDIR, ReadFileTool, WriteFileTool, EditFileTool
 import src.tools.file_tools as ft
 
 
 @pytest.fixture(autouse=True)
 def patch_workdir(monkeypatch, tmp_path):
-    """Change current working directory to tmp_path for all tests in this module."""
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(ft, "WORKDIR", tmp_path)
 
 
-def test_safe_path_relative():
+def test_safe_path_relative(tmp_path):
     result = safe_path("src/main.py")
-    assert result.name == "main.py"
+    assert result == tmp_path / "src" / "main.py"
 
 
-def test_safe_path_subdirectory():
+def test_safe_path_subdirectory(tmp_path):
     result = safe_path("deep/nested/file.txt")
-    assert result.name == "file.txt"
+    assert result == tmp_path / "deep" / "nested" / "file.txt"
 
 
 def test_safe_path_traversal_attack():
