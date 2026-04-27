@@ -1,1 +1,21 @@
 .worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Environment variables
+.env
+
+# pytest
+.pytest_cache/
+
+# Agent skills (generated/local)
+.agents/
+
