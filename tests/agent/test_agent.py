@@ -285,3 +285,51 @@ class TestAgentContextCompression:
         assert tool_results[2]["content"] == "small"
         assert tool_results[3]["content"] == "small"
         assert tool_results[4]["content"] == "small"
+
+
+class TestAgentCompactToolIntegration:
+    def test_compact_tool_replaces_old_history(self):
+        from src.tools.compact_tool import CompactTool
+
+        mock_provider = MagicMock()
+        registry = ToolRegistry()
+        agent = Agent(mock_provider, registry)
+
+        # Seed history: 2 old pairs + 1 recent pair
+        agent.messages = [
+            {"role": "user", "content": "old user 1"},
+            {"role": "assistant", "content": "old assistant 1"},
+            {"role": "user", "content": "old user 2"},
+            {"role": "assistant", "content": "old assistant 2"},
+            {"role": "user", "content": "recent user"},
+            {"role": "assistant", "content": "recent assistant"},
+        ]
+
+        # Register compact tool bound to agent state
+        compact_tool = CompactTool(
+            provider=mock_provider,
+            messages=agent.messages,
+            compact_state=agent.compact_state,
+        )
+        registry.register(compact_tool)
+
+        # Mock provider to return a valid summary
+        mock_provider.chat.return_value = MagicMock(
+            stop_reason="end_turn",
+            content=[MagicMock(type="text", text="Summary of old history.")],
+        )
+
+        result = compact_tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
+
+        assert not result.is_error
+        assert agent.compact_state.has_compacted is True
+        assert agent.compact_state.last_summary == "Summary of old history."
+
+        # Old history should be replaced by a single assistant summary
+        assert len(agent.messages) == 2
+        assert agent.messages[0]["role"] == "assistant"
+        assert agent.messages[0]["content"] == "Summary of old history."
+
+        # Recent pair preserved
+        assert agent.messages[1]["role"] == "assistant"
+        assert agent.messages[1]["content"] == "recent assistant"

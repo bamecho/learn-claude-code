@@ -120,6 +120,26 @@ class TestCompactTool:
         assert result.is_error
         assert result.content == "Summary generation returned empty content."
 
+    def test_provider_error_stop_reason_returns_error(self):
+        messages = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old"},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent"},
+        ]
+        compact_state = CompactState()
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(
+            stop_reason="error",
+            content=[MagicMock(type="text", text="provider internal error")],
+        )
+        tool = CompactTool(provider, messages, compact_state)
+        result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
+        assert result.is_error
+        assert result.content == "Failed to generate summary: provider internal error"
+        assert not compact_state.has_compacted
+        assert len(messages) == 4  # history unchanged
+
     def test_serialize_messages_with_list_content_blocks(self):
         messages = [
             {

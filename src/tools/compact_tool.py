@@ -88,6 +88,18 @@ class CompactTool:
                 is_error=True,
             )
 
+        if getattr(response, "stop_reason", None) == "error":
+            error_text = ""
+            for block in response.content:
+                if getattr(block, "type", None) == "text":
+                    error_text = getattr(block, "text", "")
+                    break
+            return ToolResult(
+                tool_use_id=tool_use_id,
+                content=f"Failed to generate summary: {error_text}",
+                is_error=True,
+            )
+
         summary_text = ""
         for block in response.content:
             if getattr(block, "type", None) == "text" and getattr(block, "text", None):
