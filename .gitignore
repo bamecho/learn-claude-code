@@ -19,3 +19,7 @@ venv/
 # Agent skills (generated/local)
 .agents/
 
+
+tests/large_log*
+.transcripts/
+.task_outputs/

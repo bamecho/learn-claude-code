@@ -152,9 +152,8 @@ class HistoryCompactor:
         return summary_text.strip()
 
     @classmethod
-    def compact_history(cls, messages: list, state, provider, focus: str | None = None) -> list:
+    def compact_history(cls, messages: list, state, provider, focus: str | None = None) -> tuple[list, Path, str]:
         transcript_path = cls.write_transcript(messages)
-        print(f"[transcript saved: {transcript_path}]")
         summary = cls.summarize_history(provider, messages)
         if focus:
             summary += f"\n\nFocus to preserve next: {focus}"
@@ -163,10 +162,11 @@ class HistoryCompactor:
             summary += f"\n\nRecent files to reopen if needed:\n{recent_lines}"
         state.has_compacted = True
         state.last_summary = summary
-        return [{
+        new_messages = [{
             "role": "user",
             "content": (
                 "This conversation was compacted so the agent can continue working.\n\n"
                 f"{summary}"
             ),
         }]
+        return new_messages, transcript_path, summary

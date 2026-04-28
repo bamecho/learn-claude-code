@@ -76,9 +76,11 @@ class CompactTool:
         old_history = self.messages[:cutoff_index]
         preserved = self.messages[cutoff_index:]
 
+        old_count = len(self.messages)
+
         # Use HistoryCompactor for the actual compaction
         try:
-            compacted = HistoryCompactor.compact_history(
+            compacted, path, summary = HistoryCompactor.compact_history(
                 old_history, self.compact_state, self.provider, focus=focus
             )
         except Exception as exc:
@@ -91,8 +93,11 @@ class CompactTool:
         # Replace messages: compacted summary + preserved recent turns
         self.messages[:] = [*compacted, *preserved]
 
-        summary_text = self.compact_state.last_summary
         return ToolResult(
             tool_use_id=tool_use_id,
-            content=f"Context compressed. Summary: {summary_text[:200]}...",
+            content=(
+                f"[transcript saved: {path}]\n"
+                f"[compacted {old_count} -> {len(self.messages)} messages]\n"
+                f"Summary: {summary[:200]}..."
+            ),
         )

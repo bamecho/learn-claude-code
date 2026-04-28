@@ -158,9 +158,13 @@ class Agent:
         # Auto-compact if context is too large
         if HistoryCompactor.estimate_context_size(state.messages) > HistoryCompactor.CONTEXT_LIMIT:
             print("[auto compact]")
-            state.messages[:] = HistoryCompactor.compact_history(
+            old_count = len(state.messages)
+            new_msgs, path, _ = HistoryCompactor.compact_history(
                 state.messages, state.compact_state, self.provider
             )
+            print(f"[transcript saved: {path}]")
+            print(f"[compacted {old_count} -> {len(new_msgs)} messages]")
+            state.messages[:] = new_msgs
 
         tools = self.registry.to_anthropic_format()
         response = self.provider.chat(normalize_messages(state.messages), tools, system=self.system)
@@ -208,7 +212,10 @@ class Agent:
                     if path:
                         track_recent_file(self.compact_state, path)
 
-                print(result.content[:200])
+                if tu.name == "compact":
+                    print(result.content)
+                else:
+                    print(result.content[:200])
                 content = result.content
                 persisted = self.persisted_output_manager.maybe_persist(
                     result.tool_use_id, content

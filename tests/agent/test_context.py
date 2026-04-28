@@ -281,7 +281,7 @@ class TestHistoryCompactor:
             {"role": "user", "content": "old"},
             {"role": "assistant", "content": "old"},
         ]
-        new_msgs = HistoryCompactor.compact_history(msgs, state, provider, focus="fix bug")
+        new_msgs, path, summary = HistoryCompactor.compact_history(msgs, state, provider, focus="fix bug")
         assert len(new_msgs) == 1
         assert new_msgs[0]["role"] == "user"
         assert "Compact summary." in new_msgs[0]["content"]
@@ -289,3 +289,5 @@ class TestHistoryCompactor:
         assert "main.py" in new_msgs[0]["content"]
         assert state.has_compacted is True
         assert state.last_summary.startswith("Compact summary.")
+        assert path.name.startswith("transcript_")
+        assert summary.startswith("Compact summary.")
