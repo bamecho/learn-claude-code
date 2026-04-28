@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from src.agent.context import CompactState, MicroCompactor, PersistedOutputManager
+from src.agent.context import CompactState, MicroCompactor, PersistedOutputManager, HistoryCompactor, track_recent_file
 from src.provider.base import LLMProvider
 from src.tools.base import ToolRegistry, ToolResult
 
@@ -155,6 +155,13 @@ class Agent:
         if state.max_turns is not None and state.turn_count > state.max_turns:
             state.transition_reason = "max_turns"
             return False
+        # Auto-compact if context is too large
+        if HistoryCompactor.estimate_context_size(state.messages) > HistoryCompactor.CONTEXT_LIMIT:
+            print("[auto compact]")
+            state.messages[:] = HistoryCompactor.compact_history(
+                state.messages, state.compact_state, self.provider
+            )
+
         tools = self.registry.to_anthropic_format()
         response = self.provider.chat(normalize_messages(state.messages), tools, system=self.system)
 
@@ -195,6 +202,11 @@ class Agent:
                     )
                 else:
                     result = tool.execute(tu.id, tu.input or {})
+
+                if tu.name == "read_file":
+                    path = tu.input.get("filePath") if isinstance(tu.input, dict) else None
+                    if path:
+                        track_recent_file(self.compact_state, path)
 
                 print(result.content[:200])
                 content = result.content
