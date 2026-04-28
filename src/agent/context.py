@@ -1,6 +1,9 @@
+import json
+import time
 from dataclasses import dataclass, field
 import os
 import sys
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -71,3 +74,87 @@ class MicroCompactor:
             content = block.get("content", "")
             if isinstance(content, str) and len(content) > 120 and content != cls.PLACEHOLDER:
                 block["content"] = cls.PLACEHOLDER
+
+
+# ---------------------------------------------------------------------------
+# recent-files tracking
+# ---------------------------------------------------------------------------
+
+def track_recent_file(state, path: str) -> None:
+    """Track the most recently read files in CompactState (max 5)."""
+    if path in state.recent_files:
+        state.recent_files.remove(path)
+    state.recent_files.append(path)
+    if len(state.recent_files) > 5:
+        state.recent_files[:] = state.recent_files[-5:]
+
+
+# ---------------------------------------------------------------------------
+# History compactor (auto-compaction before API calls)
+# ---------------------------------------------------------------------------
+
+class HistoryCompactor:
+    """Summarize and replace old conversation history when context grows too large."""
+
+    CONTEXT_LIMIT = 50000
+    TRANSCRIPT_DIR = Path(".transcripts")
+
+    @staticmethod
+    def estimate_context_size(messages: list) -> int:
+        return len(str(messages))
+
+    @classmethod
+    def write_transcript(cls, messages: list) -> Path:
+        cls.TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+        path = cls.TRANSCRIPT_DIR / f"transcript_{int(time.time())}.jsonl"
+        with path.open("w", encoding="utf-8") as handle:
+            for message in messages:
+                handle.write(json.dumps(message, default=str) + "\n")
+        return path
+
+    @classmethod
+    def summarize_history(cls, provider, messages: list, max_tokens: int = 2000) -> str:
+        conversation = json.dumps(messages, default=str)[:80000]
+        prompt = (
+            "Summarize this coding-agent conversation so work can continue.\n"
+            "Preserve:\n"
+            "1. The current goal\n"
+            "2. Important findings and decisions\n"
+            "3. Files read or changed\n"
+            "4. Remaining work\n"
+            "5. User constraints and preferences\n"
+            "Be compact but concrete.\n\n"
+            f"{conversation}"
+        )
+        response = provider.chat(
+            messages=[{"role": "user", "content": prompt}],
+            tools=None,
+            max_tokens=max_tokens,
+        )
+        # Extract text from response
+        summary_text = ""
+        for block in response.content:
+            if getattr(block, "type", None) == "text" and getattr(block, "text", None):
+                summary_text = block.text
+                break
+        return summary_text.strip()
+
+    @classmethod
+    def compact_history(cls, messages: list, state, provider, focus: str | None = None) -> list:
+        transcript_path = cls.write_transcript(messages)
+        print(f"[transcript saved: {transcript_path}]")
+        summary = cls.summarize_history(provider, messages)
+        if focus:
+            summary += f"\n\nFocus to preserve next: {focus}"
+        if state.recent_files:
+            recent_lines = "\n".join(f"- {path}" for path in state.recent_files)
+            summary += f"\n\nRecent files to reopen if needed:\n{recent_lines}"
+        state.has_compacted = True
+        state.last_summary = summary
+        return [{
+            "role": "user",
+            "content": (
+                "This conversation was compacted so the agent can continue working.\n\n"
+                f"{summary}"
+            ),
+        }]

@@ -217,3 +217,75 @@ class TestMicroCompactor:
         assert msgs[2]["content"][0]["content"] == long_text
         assert msgs[3]["content"][0]["content"] == long_text
         assert msgs[4]["content"][0]["content"] == long_text
+
+
+from unittest.mock import MagicMock
+from src.agent.context import HistoryCompactor, track_recent_file, CompactState
+
+
+class TestTrackRecentFile:
+    def test_adds_file_and_caps_at_five(self):
+        state = CompactState()
+        for i in range(7):
+            track_recent_file(state, f"file{i}.py")
+        assert state.recent_files == [
+            "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"
+        ]
+
+    def test_moves_existing_file_to_end(self):
+        state = CompactState()
+        track_recent_file(state, "a.py")
+        track_recent_file(state, "b.py")
+        track_recent_file(state, "a.py")
+        assert state.recent_files == ["b.py", "a.py"]
+
+
+class TestHistoryCompactor:
+    def test_estimate_context_size(self):
+        msgs = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
+        size = HistoryCompactor.estimate_context_size(msgs)
+        assert size == len(str(msgs))
+
+    def test_write_transcript_creates_jsonl(self, tmp_path):
+        import json
+        orig_dir = HistoryCompactor.TRANSCRIPT_DIR
+        HistoryCompactor.TRANSCRIPT_DIR = tmp_path / ".transcripts"
+        try:
+            msgs = [{"role": "user", "content": "test"}]
+            path = HistoryCompactor.write_transcript(msgs)
+            assert path.exists()
+            lines = path.read_text(encoding="utf-8").strip().split("\n")
+            assert len(lines) == 1
+            assert json.loads(lines[0]) == msgs[0]
+        finally:
+            HistoryCompactor.TRANSCRIPT_DIR = orig_dir
+
+    def test_summarize_history_extracts_text(self):
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(
+            content=[MagicMock(type="text", text="Summary text.")]
+        )
+        result = HistoryCompactor.summarize_history(provider, [])
+        assert result == "Summary text."
+        call_args = provider.chat.call_args
+        assert call_args.kwargs["max_tokens"] == 2000
+
+    def test_compact_history_replaces_messages(self):
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(
+            content=[MagicMock(type="text", text="Compact summary.")]
+        )
+        state = CompactState()
+        state.recent_files = ["main.py", "utils.py"]
+        msgs = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old"},
+        ]
+        new_msgs = HistoryCompactor.compact_history(msgs, state, provider, focus="fix bug")
+        assert len(new_msgs) == 1
+        assert new_msgs[0]["role"] == "user"
+        assert "Compact summary." in new_msgs[0]["content"]
+        assert "fix bug" in new_msgs[0]["content"]
+        assert "main.py" in new_msgs[0]["content"]
+        assert state.has_compacted is True
+        assert state.last_summary.startswith("Compact summary.")
