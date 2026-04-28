@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from src.agent.context import CompactState
+from src.agent.context import CompactState, MicroCompactor, PersistedOutputManager
 from src.provider.base import LLMProvider
 from src.tools.base import ToolRegistry, ToolResult
 
@@ -107,6 +107,7 @@ class Agent:
         todo_tool = self.registry.get("todo")
         if todo_tool is not None:
             self.todo_manager = getattr(todo_tool, "manager", None)
+        self.persisted_output_manager = PersistedOutputManager()
 
     def run_interactive(self) -> None:
         print("Agent 已启动。输入 /exit、exit、q 或留空退出。")
@@ -194,10 +195,23 @@ class Agent:
                     result = tool.execute(tu.id, tu.input or {})
 
                 print(result.content[:200])
+                content = result.content
+                persisted = self.persisted_output_manager.maybe_persist(
+                    result.tool_use_id, content
+                )
+                if persisted is not None:
+                    content = (
+                        f"<persisted-output>\n"
+                        f"Full output saved to: {persisted.file_path}\n"
+                        f"Preview:\n"
+                        f"{persisted.preview}\n"
+                        f"</persisted-output>"
+                    )
+
                 tool_result_blocks.append({
                     "type": "tool_result",
                     "tool_use_id": result.tool_use_id,
-                    "content": result.content,
+                    "content": content,
                     "is_error": result.is_error,
                 })
 
@@ -215,6 +229,7 @@ class Agent:
                         )
 
             state.messages.append({"role": "user", "content": tool_result_blocks})
+            MicroCompactor.apply(state.messages)
 
         if response.stop_reason == "end_turn":
             state.transition_reason = None
