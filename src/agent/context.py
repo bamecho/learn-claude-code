@@ -36,3 +36,27 @@ class PersistedOutputManager:
             return None
         preview = content[: self.PREVIEW_LENGTH]
         return PersistedOutput(tool_use_id, file_path, preview, len(content))
+
+
+class MicroCompactor:
+    KEEP_LAST = 3
+    PLACEHOLDER = "(... older tool output omitted)"
+
+    @classmethod
+    def apply(cls, messages: list[dict]) -> None:
+        tool_result_indices: list[tuple[int, int]] = []
+        for msg_idx, msg in enumerate(messages):
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block_idx, block in enumerate(content):
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    tool_result_indices.append((msg_idx, block_idx))
+
+        if len(tool_result_indices) <= cls.KEEP_LAST:
+            return
+
+        for msg_idx, block_idx in tool_result_indices[:-cls.KEEP_LAST]:
+            block = messages[msg_idx]["content"][block_idx]
+            if block.get("content") != cls.PLACEHOLDER:
+                block["content"] = cls.PLACEHOLDER
