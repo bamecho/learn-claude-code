@@ -12,12 +12,12 @@ class AnthropicProvider:
         self.client = Anthropic(api_key=api_key, base_url=base_url)
         self.model = model or "claude-3-5-sonnet-20241022"
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None, system: str | None = None) -> LLMResponse:
+    def chat(self, messages: list[dict], tools: list[dict] | None = None, system: str | None = None, max_tokens: int | None = None) -> LLMResponse:
         try:
             kwargs: dict = {
                 "model": self.model,
                 "messages": messages,
-                "max_tokens": 4096,
+                "max_tokens": max_tokens if max_tokens is not None else 4096,
             }
             if tools:
                 kwargs["tools"] = tools
