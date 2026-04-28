@@ -108,6 +108,7 @@ class Agent:
         if todo_tool is not None:
             self.todo_manager = getattr(todo_tool, "manager", None)
         self.persisted_output_manager = PersistedOutputManager()
+        self.compact_state = CompactState()
 
     def run_interactive(self) -> None:
         print("Agent 已启动。输入 /exit、exit、q 或留空退出。")
@@ -141,6 +142,7 @@ class Agent:
     def _run_turn(self, user_input: str, max_turns: int | None = None) -> None:
         self.messages.append({"role": "user", "content": user_input})
         state = LoopState(messages=self.messages, max_turns=max_turns)
+        state.compact_state = self.compact_state
         self._agent_loop(state)
         self.turn_count = state.turn_count
         self.transition_reason = state.transition_reason

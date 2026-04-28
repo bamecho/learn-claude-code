@@ -7,6 +7,7 @@ from src.tools.bash_tool import BashTool
 from src.tools.file_tools import ReadFileTool, WriteFileTool, EditFileTool
 from src.tools.todo_tool import TodoTool
 from src.tools.task_tool import TaskTool
+from src.tools.compact_tool import CompactTool
 from src.tools.skill_registry import SkillRegistry
 from src.tools.skill_tool import SkillTool
 from src.agent.agent import Agent
@@ -63,7 +64,9 @@ def main() -> None:
     registry.register(TodoTool())
     registry.register(TaskTool(provider, registry, system=system, subagent_system=subagent_system))
     registry.register(SkillTool(skill_registry))
+
     agent = Agent(provider, registry, system=system)
+    registry.register(CompactTool(provider, agent.messages, agent.compact_state))
 
     try:
         agent.run_interactive()
