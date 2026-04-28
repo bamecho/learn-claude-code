@@ -131,12 +131,24 @@ class HistoryCompactor:
             tools=None,
             max_tokens=max_tokens,
         )
-        # Extract text from response
+
+        if getattr(response, "stop_reason", None) == "error":
+            error_text = ""
+            for block in response.content:
+                if getattr(block, "type", None) == "text":
+                    error_text = getattr(block, "text", "")
+                    break
+            raise RuntimeError(error_text or "provider internal error")
+
         summary_text = ""
         for block in response.content:
             if getattr(block, "type", None) == "text" and getattr(block, "text", None):
                 summary_text = block.text
                 break
+
+        if not summary_text:
+            raise RuntimeError("Summary generation returned empty content.")
+
         return summary_text.strip()
 
     @classmethod

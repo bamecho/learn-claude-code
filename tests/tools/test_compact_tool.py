@@ -35,10 +35,10 @@ class TestCompactTool:
         result = tool.execute("tid", {"strategy": "auto", "keep_last_assistant": 1})
         assert not result.is_error
         assert len(messages) == 2
-        assert messages[0]["role"] == "assistant"
-        assert messages[0]["content"] == "Summary: long conversation."
+        assert messages[0]["role"] == "user"
+        assert "Summary: long conversation." in messages[0]["content"]
         assert compact_state.has_compacted is True
-        assert compact_state.last_summary == "Summary: long conversation."
+        assert "Summary: long conversation." in compact_state.last_summary
 
     def test_force_mode_compresses(self):
         messages = [
@@ -56,10 +56,10 @@ class TestCompactTool:
         result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
         assert not result.is_error
         assert len(messages) == 2  # summary + recent
-        assert messages[0]["role"] == "assistant"
-        assert messages[0]["content"] == "Summary: user said hello."
+        assert messages[0]["role"] == "user"
+        assert "Summary: user said hello." in messages[0]["content"]
         assert compact_state.has_compacted is True
-        assert compact_state.last_summary == "Summary: user said hello."
+        assert "Summary: user said hello." in compact_state.last_summary
 
     def test_provider_failure_returns_error(self):
         messages = [
@@ -101,7 +101,7 @@ class TestCompactTool:
         tool = CompactTool(provider, messages, compact_state)
         result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
         assert result.is_error
-        assert result.content == "Summary generation returned empty content."
+        assert "Summary generation returned empty content." in result.content
 
     def test_response_with_no_text_block_returns_error(self):
         messages = [
@@ -118,7 +118,7 @@ class TestCompactTool:
         tool = CompactTool(provider, messages, compact_state)
         result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
         assert result.is_error
-        assert result.content == "Summary generation returned empty content."
+        assert "Summary generation returned empty content." in result.content
 
     def test_provider_error_stop_reason_returns_error(self):
         messages = [
@@ -140,21 +140,20 @@ class TestCompactTool:
         assert not compact_state.has_compacted
         assert len(messages) == 4  # history unchanged
 
-    def test_serialize_messages_with_list_content_blocks(self):
+    def test_focus_parameter_included_in_summary(self):
         messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "first block"},
-                    {"type": "text", "text": "second block"},
-                ],
-            },
-            {
-                "role": "assistant",
-                "content": [
-                    {"content": "nested content"},
-                ],
-            },
+            {"role": "user", "content": "old user msg"},
+            {"role": "assistant", "content": "old assistant msg"},
+            {"role": "user", "content": "recent user msg"},
+            {"role": "assistant", "content": "recent assistant msg"},
         ]
-        result = CompactTool._serialize_messages(messages)
-        assert result == "[user] first block\nsecond block\n[assistant] nested content"
+        compact_state = CompactState()
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(
+            content=[MagicMock(type="text", text="Summary: focused.")]
+        )
+        tool = CompactTool(provider, messages, compact_state)
+        result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1, "focus": "auth bug"})
+        assert not result.is_error
+        assert messages[0]["role"] == "user"
+        assert "auth bug" in messages[0]["content"]

@@ -1,6 +1,6 @@
 from src.tools.base import ToolResult
 from src.provider.base import LLMProvider
-from src.agent.context import CompactState
+from src.agent.context import CompactState, HistoryCompactor
 
 
 class CompactTool:
@@ -8,7 +8,8 @@ class CompactTool:
     description = (
         "Compress conversation history by summarizing old messages. "
         "Use strategy='auto' to compress only when context is large, "
-        "or strategy='force' to compress immediately."
+        "or strategy='force' to compress immediately. "
+        "Optionally provide a 'focus' hint to preserve in the summary."
     )
     input_schema = {
         "type": "object",
@@ -24,6 +25,11 @@ class CompactTool:
                 "description": "Number of recent assistant messages to preserve verbatim.",
                 "default": 3,
                 "minimum": 1,
+            },
+            "focus": {
+                "type": "string",
+                "description": "Optional focus area or topic to preserve in the summary.",
+                "default": "",
             },
         },
         "required": [],
@@ -42,6 +48,7 @@ class CompactTool:
     def execute(self, tool_use_id: str, input: dict) -> ToolResult:
         strategy = input.get("strategy", "auto")
         keep_last = input.get("keep_last_assistant", 3)
+        focus = input.get("focus") or None
 
         if strategy == "auto":
             total_chars = sum(
@@ -69,17 +76,10 @@ class CompactTool:
         old_history = self.messages[:cutoff_index]
         preserved = self.messages[cutoff_index:]
 
-        flat_text = self._serialize_messages(old_history)
-        prompt = (
-            "Summarize the following conversation history in a concise paragraph, "
-            "preserving key decisions, file paths, and error states:\n\n"
-            f"{flat_text}"
-        )
-
+        # Use HistoryCompactor for the actual compaction
         try:
-            response = self.provider.chat(
-                messages=[{"role": "user", "content": prompt}],
-                tools=None,
+            compacted = HistoryCompactor.compact_history(
+                old_history, self.compact_state, self.provider, focus=focus
             )
         except Exception as exc:
             return ToolResult(
@@ -88,58 +88,11 @@ class CompactTool:
                 is_error=True,
             )
 
-        if getattr(response, "stop_reason", None) == "error":
-            error_text = ""
-            for block in response.content:
-                if getattr(block, "type", None) == "text":
-                    error_text = getattr(block, "text", "")
-                    break
-            return ToolResult(
-                tool_use_id=tool_use_id,
-                content=f"Failed to generate summary: {error_text}",
-                is_error=True,
-            )
+        # Replace messages: compacted summary + preserved recent turns
+        self.messages[:] = [*compacted, *preserved]
 
-        summary_text = ""
-        for block in response.content:
-            if getattr(block, "type", None) == "text" and getattr(block, "text", None):
-                summary_text = block.text
-                break
-
-        if not summary_text:
-            return ToolResult(
-                tool_use_id=tool_use_id,
-                content="Summary generation returned empty content.",
-                is_error=True,
-            )
-
-        self.messages[:] = [
-            {"role": "assistant", "content": summary_text},
-            *preserved,
-        ]
-        self.compact_state.has_compacted = True
-        self.compact_state.last_summary = summary_text
-
+        summary_text = self.compact_state.last_summary
         return ToolResult(
             tool_use_id=tool_use_id,
             content=f"Context compressed. Summary: {summary_text[:200]}...",
         )
-
-    @staticmethod
-    def _serialize_messages(messages: list[dict]) -> str:
-        parts = []
-        for msg in messages:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if isinstance(content, list):
-                texts = []
-                for block in content:
-                    if isinstance(block, dict) and "text" in block:
-                        texts.append(block["text"])
-                    elif isinstance(block, dict) and "content" in block:
-                        texts.append(str(block["content"]))
-                    else:
-                        texts.append(str(block))
-                content = "\n".join(texts)
-            parts.append(f"[{role}] {content}")
-        return "\n".join(parts)
