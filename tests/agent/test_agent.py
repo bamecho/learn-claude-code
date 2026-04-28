@@ -126,10 +126,10 @@ class TestAgentCompactToolIntegration:
         assert agent.compact_state.has_compacted is True
         assert agent.compact_state.last_summary == "Summary of old history."
 
-        # Old history should be replaced by a single assistant summary
+        # Old history should be replaced by a single user summary
         assert len(agent.messages) == 2
-        assert agent.messages[0]["role"] == "assistant"
-        assert agent.messages[0]["content"] == "Summary of old history."
+        assert agent.messages[0]["role"] == "user"
+        assert "Summary of old history." in agent.messages[0]["content"]
 
         # Recent pair preserved
         assert agent.messages[1]["role"] == "assistant"
@@ -151,11 +151,18 @@ class TestAgentAutoCompact:
         )
         registry.register(mock_tool)
 
+        # First call = summary (returns text), second call = actual turn (returns tool_use)
         provider = MagicMock()
-        provider.chat.return_value = LLMResponse(
-            content=[ContentBlock(type="tool_use", id="t1", name="mock_tool", input={})],
-            stop_reason="tool_use",
-        )
+        provider.chat.side_effect = [
+            LLMResponse(
+                content=[ContentBlock(type="text", text="Compacted summary.")],
+                stop_reason="end_turn",
+            ),
+            LLMResponse(
+                content=[ContentBlock(type="tool_use", id="t1", name="mock_tool", input={})],
+                stop_reason="tool_use",
+            ),
+        ]
 
         agent = Agent(provider, registry)
         # Seed messages with a huge string to trigger auto-compaction
