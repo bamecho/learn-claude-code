@@ -201,3 +201,87 @@ def test_agent_respects_max_turns():
 
     assert mock_provider.chat.call_count == 1
     assert agent.transition_reason == "max_turns"
+
+
+class TestAgentContextCompression:
+    def test_large_tool_result_gets_persisted_marker(self, tmp_path):
+        from src.agent.context import PersistedOutputManager
+
+        registry = ToolRegistry()
+        mock_tool = MagicMock()
+        mock_tool.name = "mock_tool"
+        mock_tool.description = "mock"
+        mock_tool.input_schema = {}
+        big_output = "x" * 35000
+        mock_tool.execute.return_value = ToolResult(
+            tool_use_id="t1", content=big_output, is_error=False
+        )
+        registry.register(mock_tool)
+
+        provider = MagicMock()
+        provider.chat.return_value = LLMResponse(
+            content=[ContentBlock(type="tool_use", id="t1", name="mock_tool", input={})],
+            stop_reason="tool_use",
+        )
+
+        agent = Agent(provider, registry)
+        agent.persisted_output_manager = PersistedOutputManager(
+            output_dir=str(tmp_path / "tool-results"),
+            threshold=30000,
+        )
+        agent._run_turn("run mock", max_turns=1)
+
+        tool_result_msg = agent.messages[2]
+        assert tool_result_msg["role"] == "user"
+        result_block = tool_result_msg["content"][0]
+        assert "persisted-output" in result_block["content"]
+
+    def test_micro_compactor_replaces_old_tool_results(self, tmp_path):
+        from src.agent.context import PersistedOutputManager
+
+        registry = ToolRegistry()
+        mock_tool = MagicMock()
+        mock_tool.name = "mock_tool"
+        mock_tool.description = "mock"
+        mock_tool.input_schema = {}
+        small_output = "small"
+        mock_tool.execute.return_value = ToolResult(
+            tool_use_id="tx", content=small_output, is_error=False
+        )
+        registry.register(mock_tool)
+
+        provider = MagicMock()
+        # Simulate 5 turns, each producing a tool_use then end_turn
+        responses = [
+            LLMResponse(
+                content=[ContentBlock(type="tool_use", id=f"t{i}", name="mock_tool", input={})],
+                stop_reason="tool_use",
+            )
+            for i in range(5)
+        ]
+        responses.append(
+            LLMResponse(content=[ContentBlock(type="text", text="done")], stop_reason="end_turn")
+        )
+        provider.chat.side_effect = responses
+
+        agent = Agent(provider, registry)
+        agent.persisted_output_manager = PersistedOutputManager(
+            output_dir=str(tmp_path / "tool-results"),
+            threshold=30000,
+        )
+        agent._run_turn("run mock", max_turns=6)
+
+        # Find all tool_result blocks across messages
+        tool_results = []
+        for msg in agent.messages:
+            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+                for block in msg["content"]:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        tool_results.append(block)
+
+        assert len(tool_results) == 5
+        assert tool_results[0]["content"] == "(... older tool output omitted)"
+        assert tool_results[1]["content"] == "(... older tool output omitted)"
+        assert tool_results[2]["content"] == "small"
+        assert tool_results[3]["content"] == "small"
+        assert tool_results[4]["content"] == "small"
