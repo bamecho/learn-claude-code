@@ -19,7 +19,7 @@ class TestPersistedOutputManager:
             assert result.tool_use_id == "id1"
             assert result.original_length == 50
             assert os.path.exists(result.file_path)
-            with open(result.file_path, "r") as f:
+            with open(result.file_path, "r", encoding="utf-8") as f:
                 assert f.read() == content
 
     def test_preview_is_first_500_chars(self):
@@ -33,8 +33,8 @@ class TestPersistedOutputManager:
         with tempfile.TemporaryDirectory() as tmpdir:
             mgr = PersistedOutputManager(output_dir=tmpdir, threshold=10)
             from unittest.mock import patch
-            with patch("builtins.open", side_effect=OSError("disk full")):
+            with patch("src.agent.context.open", side_effect=OSError("disk full")):
                 result = mgr.maybe_persist("id3", "x" * 50)
             assert result is None
             captured = capsys.readouterr()
-            assert "Warning" in captured.err or "persist" in captured.err
+            assert "failed to persist output" in captured.err
