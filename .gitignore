@@ -23,3 +23,5 @@ venv/
 tests/large_log*
 .transcripts/
 .task_outputs/
+.claude/
+.hooks.json

@@ -11,6 +11,7 @@ from src.tools.compact_tool import CompactTool
 from src.tools.skill_registry import SkillRegistry
 from src.tools.skill_tool import SkillTool
 from src.agent.agent import Agent
+from src.hooks.runner import HookRunner
 from src.permissions.engine import PermissionEngine
 
 
@@ -67,7 +68,19 @@ def main() -> None:
     registry.register(SkillTool(skill_registry))
 
     permission_engine = PermissionEngine(mode="default")
-    agent = Agent(provider, registry, system=system, permission_engine=permission_engine)
+
+    hook_runner = None
+    if os.path.isfile(".hooks.json"):
+        hook_runner = HookRunner(config_path=".hooks.json")
+        print("[Hooks loaded from .hooks.json]")
+
+    agent = Agent(
+        provider,
+        registry,
+        system=system,
+        permission_engine=permission_engine,
+        hook_runner=hook_runner,
+    )
     registry.register(CompactTool(provider, agent.messages, agent.compact_state))
 
     try:

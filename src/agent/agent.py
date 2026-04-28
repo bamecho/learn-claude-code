@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from src.agent.context import CompactState, MicroCompactor, PersistedOutputManager, HistoryCompactor, track_recent_file
+from src.hooks.runner import HookRunner
 from src.permissions.engine import PermissionEngine
 from src.provider.base import LLMProvider
 from src.tools.base import ToolRegistry, ToolResult
@@ -99,6 +100,7 @@ class Agent:
         system: str | None = None,
         permission_engine: PermissionEngine | None = None,
         interactive: bool = True,
+        hook_runner: HookRunner | None = None,
     ):
         self.provider = provider
         self.registry = registry
@@ -114,9 +116,13 @@ class Agent:
         self.compact_state = CompactState()
         self.permission_engine = permission_engine
         self.interactive = interactive
+        self.hook_runner = hook_runner
 
     def run_interactive(self) -> None:
         print("Agent 已启动。输入 /exit、exit、q 或留空退出。")
+        # Fire SessionStart hooks once before the interactive loop
+        if self.hook_runner is not None:
+            self.hook_runner.run("SessionStart", {"tool_name": "", "tool_input": {}})
         while True:
             try:
                 user_input = input("> ").strip()
@@ -264,6 +270,30 @@ class Agent:
                 if command_str:
                     print(f"\n\033[33m$ {command_str}\033[0m")
 
+                tool_input = dict(tu.input or {})
+
+                # PreToolUse hook
+                if self.hook_runner is not None:
+                    ctx = {"tool_name": tu.name, "tool_input": tool_input}
+                    pre = self.hook_runner.run("PreToolUse", ctx)
+                    for msg in pre.get("messages", []):
+                        tool_result_blocks.append({
+                            "type": "tool_result",
+                            "tool_use_id": tu.id,
+                            "content": f"[Hook message]: {msg}",
+                        })
+                    if pre.get("blocked"):
+                        reason = pre.get("block_reason", "Blocked by hook")
+                        tool_result_blocks.append({
+                            "type": "tool_result",
+                            "tool_use_id": tu.id,
+                            "content": f"Tool blocked by PreToolUse hook: {reason}",
+                            "is_error": True,
+                        })
+                        continue
+                    # tool_input may have been updated by hook
+                    tool_input = ctx.get("tool_input", tool_input)
+
                 tool = self.registry.get(tu.name)
                 if tool is None:
                     result = ToolResult(
@@ -272,7 +302,18 @@ class Agent:
                         is_error=True,
                     )
                 else:
-                    result = self._check_and_execute(tool, tu.id, tu.name, tu.input or {})
+                    result = self._check_and_execute(tool, tu.id, tu.name, tool_input)
+
+                # PostToolUse hook
+                if self.hook_runner is not None:
+                    ctx = {"tool_name": tu.name, "tool_input": tool_input, "tool_output": result.content}
+                    post = self.hook_runner.run("PostToolUse", ctx)
+                    for msg in post.get("messages", []):
+                        result = ToolResult(
+                            tool_use_id=result.tool_use_id,
+                            content=result.content + f"\n[Hook note]: {msg}",
+                            is_error=result.is_error,
+                        )
 
                 if tu.name == "read_file":
                     path = tu.input.get("filePath") if isinstance(tu.input, dict) else None
