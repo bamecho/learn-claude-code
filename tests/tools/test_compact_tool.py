@@ -74,7 +74,7 @@ class TestCompactTool:
         tool = CompactTool(provider, messages, compact_state)
         result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
         assert result.is_error
-        assert "network down" in result.content
+        assert result.content == "Failed to generate summary: network down"
         assert not compact_state.has_compacted
 
     def test_keep_last_assistant_equal_to_total_returns_noop(self):
@@ -137,5 +137,4 @@ class TestCompactTool:
             },
         ]
         result = CompactTool._serialize_messages(messages)
-        assert "[user] first block\nsecond block" in result
-        assert "[assistant] nested content" in result
+        assert result == "[user] first block\nsecond block\n[assistant] nested content"
