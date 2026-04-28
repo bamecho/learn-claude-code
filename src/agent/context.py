@@ -39,11 +39,14 @@ class PersistedOutputManager:
 
 
 class MicroCompactor:
+    """Compact older tool_result blocks in message histories to reduce context size."""
+
     KEEP_LAST = 3
     PLACEHOLDER = "(... older tool output omitted)"
 
     @classmethod
     def apply(cls, messages: list[dict]) -> None:
+        """Replace content of older tool_result blocks with a placeholder, keeping the last 3."""
         tool_result_indices: list[tuple[int, int]] = []
         for msg_idx, msg in enumerate(messages):
             content = msg.get("content")

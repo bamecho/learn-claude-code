@@ -111,5 +111,54 @@ class TestMicroCompactor:
         ]
         MicroCompactor.apply(msgs)
         first = msgs[0]["content"][0]["content"]
+        assert first == "(... older tool output omitted)"
         MicroCompactor.apply(msgs)
         assert msgs[0]["content"][0]["content"] == first
+
+    def test_mixed_content_blocks(self):
+        msgs = [
+            {"role": "user", "content": [
+                {"type": "text", "text": "hello"},
+                {"type": "tool_result", "tool_use_id": "a", "content": "out1"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "b", "content": "out2"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "c", "content": "out3"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "text", "text": "world"},
+                {"type": "tool_result", "tool_use_id": "d", "content": "out4"}
+            ]},
+        ]
+        MicroCompactor.apply(msgs)
+        assert msgs[0]["content"][0]["text"] == "hello"
+        assert msgs[0]["content"][1]["content"] == "(... older tool output omitted)"
+        assert msgs[1]["content"][0]["content"] == "out2"
+        assert msgs[2]["content"][0]["content"] == "out3"
+        assert msgs[3]["content"][0]["text"] == "world"
+        assert msgs[3]["content"][1]["content"] == "out4"
+
+    def test_string_content_skipped(self):
+        msgs = [
+            {"role": "user", "content": "plain string"},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "a", "content": "out1"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "b", "content": "out2"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "c", "content": "out3"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "d", "content": "out4"}
+            ]},
+        ]
+        MicroCompactor.apply(msgs)
+        assert msgs[0]["content"] == "plain string"
+        assert msgs[1]["content"][0]["content"] == "(... older tool output omitted)"
+        assert msgs[2]["content"][0]["content"] == "out2"
+        assert msgs[3]["content"][0]["content"] == "out3"
+        assert msgs[4]["content"][0]["content"] == "out4"
