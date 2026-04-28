@@ -1,18 +1,16 @@
-from dataclasses import dataclass, field
 from src.tools.base import ToolResult
 from src.provider.base import LLMProvider
 from src.agent.context import CompactState
 
 
-@dataclass
 class CompactTool:
-    name: str = "compact"
-    description: str = (
+    name = "compact"
+    description = (
         "Compress conversation history by summarizing old messages. "
         "Use strategy='auto' to compress only when context is large, "
         "or strategy='force' to compress immediately."
     )
-    input_schema: dict = field(default_factory=lambda: {
+    input_schema = {
         "type": "object",
         "properties": {
             "strategy": {
@@ -28,7 +26,8 @@ class CompactTool:
                 "minimum": 1,
             },
         },
-    })
+        "required": [],
+    }
 
     def __init__(
         self,

@@ -15,8 +15,30 @@ class TestCompactTool:
         provider = MagicMock()
         tool = CompactTool(provider, messages, compact_state)
         result = tool.execute("tid", {"strategy": "auto"})
-        assert "no compression needed" in result.content.lower() or "within" in result.content.lower()
+        assert result.content == "Current context is within the safe threshold; no compression needed."
         assert not result.is_error
+
+    def test_auto_mode_above_threshold_compresses(self):
+        long_content = "x" * 32000
+        messages = [
+            {"role": "user", "content": long_content},
+            {"role": "assistant", "content": "old assistant msg"},
+            {"role": "user", "content": "recent user msg"},
+            {"role": "assistant", "content": "recent assistant msg"},
+        ]
+        compact_state = CompactState()
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(
+            content=[MagicMock(type="text", text="Summary: long conversation.")]
+        )
+        tool = CompactTool(provider, messages, compact_state)
+        result = tool.execute("tid", {"strategy": "auto", "keep_last_assistant": 1})
+        assert not result.is_error
+        assert len(messages) == 2
+        assert messages[0]["role"] == "assistant"
+        assert messages[0]["content"] == "Summary: long conversation."
+        assert compact_state.has_compacted is True
+        assert compact_state.last_summary == "Summary: long conversation."
 
     def test_force_mode_compresses(self):
         messages = [
@@ -35,7 +57,7 @@ class TestCompactTool:
         assert not result.is_error
         assert len(messages) == 2  # summary + recent
         assert messages[0]["role"] == "assistant"
-        assert "Summary" in messages[0]["content"]
+        assert messages[0]["content"] == "Summary: user said hello."
         assert compact_state.has_compacted is True
         assert compact_state.last_summary == "Summary: user said hello."
 
@@ -64,4 +86,56 @@ class TestCompactTool:
         provider = MagicMock()
         tool = CompactTool(provider, messages, compact_state)
         result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
-        assert "no old history" in result.content.lower()
+        assert result.content == "No old history to compress."
+
+    def test_empty_response_content_returns_error(self):
+        messages = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old"},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent"},
+        ]
+        compact_state = CompactState()
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(content=[])
+        tool = CompactTool(provider, messages, compact_state)
+        result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
+        assert result.is_error
+        assert result.content == "Summary generation returned empty content."
+
+    def test_response_with_no_text_block_returns_error(self):
+        messages = [
+            {"role": "user", "content": "old"},
+            {"role": "assistant", "content": "old"},
+            {"role": "user", "content": "recent"},
+            {"role": "assistant", "content": "recent"},
+        ]
+        compact_state = CompactState()
+        provider = MagicMock()
+        provider.chat.return_value = MagicMock(
+            content=[MagicMock(type="tool_use", name="some_tool")]
+        )
+        tool = CompactTool(provider, messages, compact_state)
+        result = tool.execute("tid", {"strategy": "force", "keep_last_assistant": 1})
+        assert result.is_error
+        assert result.content == "Summary generation returned empty content."
+
+    def test_serialize_messages_with_list_content_blocks(self):
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "first block"},
+                    {"type": "text", "text": "second block"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {"content": "nested content"},
+                ],
+            },
+        ]
+        result = CompactTool._serialize_messages(messages)
+        assert "[user] first block\nsecond block" in result
+        assert "[assistant] nested content" in result
