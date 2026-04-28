@@ -11,6 +11,7 @@ from src.tools.compact_tool import CompactTool
 from src.tools.skill_registry import SkillRegistry
 from src.tools.skill_tool import SkillTool
 from src.agent.agent import Agent
+from src.permissions.engine import PermissionEngine
 
 
 def main() -> None:
@@ -65,7 +66,8 @@ def main() -> None:
     registry.register(TaskTool(provider, registry, system=system, subagent_system=subagent_system))
     registry.register(SkillTool(skill_registry))
 
-    agent = Agent(provider, registry, system=system)
+    permission_engine = PermissionEngine(mode="default")
+    agent = Agent(provider, registry, system=system, permission_engine=permission_engine)
     registry.register(CompactTool(provider, agent.messages, agent.compact_state))
 
     try:

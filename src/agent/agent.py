@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from src.agent.context import CompactState, MicroCompactor, PersistedOutputManager, HistoryCompactor, track_recent_file
+from src.permissions.engine import PermissionEngine
 from src.provider.base import LLMProvider
 from src.tools.base import ToolRegistry, ToolResult
 
@@ -96,6 +97,8 @@ class Agent:
         provider: LLMProvider,
         registry: ToolRegistry,
         system: str | None = None,
+        permission_engine: PermissionEngine | None = None,
+        interactive: bool = True,
     ):
         self.provider = provider
         self.registry = registry
@@ -109,6 +112,8 @@ class Agent:
             self.todo_manager = getattr(todo_tool, "manager", None)
         self.persisted_output_manager = PersistedOutputManager()
         self.compact_state = CompactState()
+        self.permission_engine = permission_engine
+        self.interactive = interactive
 
     def run_interactive(self) -> None:
         print("Agent 已启动。输入 /exit、exit、q 或留空退出。")
@@ -121,6 +126,26 @@ class Agent:
                 print("再见！")
                 break
             if not user_input:
+                continue
+            # Runtime permission commands
+            if user_input.startswith("/mode"):
+                parts = user_input.split()
+                modes = ("default", "plan", "auto")
+                if len(parts) == 2 and parts[1] in modes:
+                    if self.permission_engine is not None:
+                        self.permission_engine.mode = parts[1]
+                        print(f"[Switched to {parts[1]} mode]")
+                    else:
+                        print("[No permission engine configured]")
+                else:
+                    print(f"Usage: /mode <{'|'.join(modes)}>")
+                continue
+            if user_input.strip() == "/rules":
+                if self.permission_engine is not None:
+                    for i, rule in enumerate(self.permission_engine.rules):
+                        print(f"  {i}: {rule}")
+                else:
+                    print("[No permission engine configured]")
                 continue
             self._run_turn(user_input)
             print()  # 空行分隔回合
@@ -138,6 +163,48 @@ class Agent:
             if text:
                 texts.append(text)
         return "\n".join(texts).strip()
+
+    def _ask_user(self, tool_name: str, reason: str) -> bool:
+        prompt = f"Allow {tool_name}? ({reason}) [y/N/always]: "
+        try:
+            answer = input(prompt).strip().lower()
+        except EOFError:
+            return False
+        if answer == "always" and self.permission_engine is not None:
+            self.permission_engine.add_allow_rule(tool_name)
+            return True
+        return answer in ("y", "yes")
+
+    def _check_and_execute(self, tool, tool_use_id: str, tool_name: str, tool_input: dict) -> ToolResult:
+        if self.permission_engine is None:
+            return tool.execute(tool_use_id, tool_input)
+
+        decision = self.permission_engine.check(tool_name, tool_input)
+        if decision["behavior"] == "deny":
+            return ToolResult(
+                tool_use_id=tool_use_id,
+                content=f"Permission denied: {decision['reason']}",
+                is_error=True,
+            )
+        if decision["behavior"] == "ask":
+            if self.interactive:
+                ok = self._ask_user(tool_name, decision["reason"])
+            else:
+                ok = False
+            if not ok:
+                if self.permission_engine is not None:
+                    self.permission_engine.record_denial()
+                    if self.permission_engine.consecutive_denials >= self.permission_engine.max_consecutive_denials:
+                        print(
+                            f"  [{self.permission_engine.consecutive_denials} consecutive denials -- "
+                            "consider switching to plan mode]"
+                        )
+                return ToolResult(
+                    tool_use_id=tool_use_id,
+                    content="Permission denied by user",
+                    is_error=True,
+                )
+        return tool.execute(tool_use_id, tool_input)
 
     def _run_turn(self, user_input: str, max_turns: int | None = None) -> None:
         self.messages.append({"role": "user", "content": user_input})
@@ -205,7 +272,7 @@ class Agent:
                         is_error=True,
                     )
                 else:
-                    result = tool.execute(tu.id, tu.input or {})
+                    result = self._check_and_execute(tool, tu.id, tu.name, tu.input or {})
 
                 if tu.name == "read_file":
                     path = tu.input.get("filePath") if isinstance(tu.input, dict) else None
