@@ -15,7 +15,7 @@ class PersistedOutputManager:
     """Manages persisting large tool outputs to disk."""
 
     DEFAULT_THRESHOLD = 30000
-    PREVIEW_LENGTH = 500
+    PREVIEW_LENGTH = 2000
 
     def __init__(self, output_dir: str | None = None, threshold: int | None = None):
         self.output_dir = output_dir or ".task_outputs/tool-results"
@@ -68,5 +68,6 @@ class MicroCompactor:
 
         for msg_idx, block_idx in tool_result_indices[:-cls.KEEP_LAST]:
             block = messages[msg_idx]["content"][block_idx]
-            if block.get("content") != cls.PLACEHOLDER:
+            content = block.get("content", "")
+            if isinstance(content, str) and len(content) > 120 and content != cls.PLACEHOLDER:
                 block["content"] = cls.PLACEHOLDER
