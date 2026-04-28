@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from src.agent.context import CompactState
 from src.provider.base import LLMProvider
 from src.tools.base import ToolRegistry, ToolResult
 
@@ -86,6 +87,7 @@ class LoopState:
     turn_count: int = 1
     transition_reason: str | None = None
     max_turns: int | None = None
+    compact_state: CompactState = field(default_factory=CompactState)
 
 
 class Agent:

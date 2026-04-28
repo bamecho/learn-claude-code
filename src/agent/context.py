@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 import sys
 
@@ -36,6 +36,13 @@ class PersistedOutputManager:
             return None
         preview = content[: self.PREVIEW_LENGTH]
         return PersistedOutput(tool_use_id, file_path, preview, len(content))
+
+
+@dataclass
+class CompactState:
+    has_compacted: bool = False
+    last_summary: str = ""
+    recent_files: list[str] = field(default_factory=list)
 
 
 class MicroCompactor:
